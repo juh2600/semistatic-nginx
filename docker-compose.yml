@@ -1,0 +1,8 @@
+services:
+  semistatic-test:
+    image: semistatic-nginx
+    environment:
+      - REPO=https://github.com/josephreed2600/semistatic-nginx.git
+      - FREQUENCY=* * * * *
+    ports:
+      - 80:80
