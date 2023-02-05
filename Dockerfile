@@ -4,9 +4,7 @@
 FROM nginx:alpine
 RUN apk update && apk add git
 RUN rmdir /srv
-RUN ln -s /usr/share/nginx/html /srv
-RUN rm /srv/*
-WORKDIR /srv
+RUN rm -rf /usr/share/nginx/html
 RUN echo >/tmp/build-crontab-and-stuff.sh '#!/bin/sh'
 RUN chmod +x /tmp/build-crontab-and-stuff.sh
 # notes to self
@@ -17,6 +15,7 @@ RUN chmod +x /tmp/build-crontab-and-stuff.sh
 # ok, if you're so smart, why are you hard-coding git? what about other systems?
 # idgaf i've never used anything else ok
 RUN cat <<EOF >>/tmp/build-crontab-and-stuff.sh
+ln -s /srv/\$DIR /usr/share/nginx/html
 crontab -l | { cat; echo "\$FREQUENCY git -C /srv pull"; } | crontab -
 git clone \$REPO /srv
 [ "\$(ls -A /srv)" ] || echo >&2 /srv still empty, was \$REPO pulled successfully?
