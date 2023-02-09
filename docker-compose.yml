@@ -2,8 +2,10 @@ services:
   semistatic-test:
     image: semistatic-nginx
     environment:
-      - REPO=https://github.com/josephreed2600/semistatic-nginx.git # git
-      - FREQUENCY=* * * * * # cron format
-      - DIR=doc # optional
+      - REPO=https://github.com/josephreed2600/semistatic-nginx.git # git repo
+      - FREQUENCY=* * * * * # optional, cron format
+      - DIR=doc # optional, subdirectory to serve
+      - BRANCH=main # optional, repo branch
+      - NGINX_CONF=default.conf # optional, nginx server config block
     ports:
       - 80:80
