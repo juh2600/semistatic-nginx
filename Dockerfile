@@ -3,10 +3,18 @@
 # and also https://www.cyberciti.biz/faq/linux-unix-shell-check-if-directory-empty/
 FROM nginx:alpine
 RUN apk update && apk add git
-RUN rmdir /srv
+
+RUN rm -rf /srv
 RUN rm -rf /usr/share/nginx/html
-RUN echo >/tmp/build-crontab-and-stuff.sh '#!/bin/sh'
-RUN chmod +x /tmp/build-crontab-and-stuff.sh
+#RUN mv /etc/nginx/conf.d/default.conf /tmp/nginx-default.conf
+RUN mv /etc/nginx/nginx.conf /tmp/nginx-default.conf
+
+RUN echo >/tmp/cronjob.sh '#!/bin/sh'
+RUN echo >/tmp/docker-entrypoint.sh '#!/bin/sh'
+
+RUN chmod +x /tmp/cronjob.sh
+RUN chmod +x /tmp/docker-entrypoint.sh
+
 # notes to self
 # why isn't the following done in RUNs and whatnot? like, y'know, a dockerfile?
 # well you see ivan, the idea here is to make the docker-compose.yml as simple
@@ -14,39 +22,61 @@ RUN chmod +x /tmp/build-crontab-and-stuff.sh
 # so we don't know at image-build time what repo we'll be pulling. 
 # ok, if you're so smart, why are you hard-coding git? what about other systems?
 # idgaf i've never used anything else ok
-RUN cat <<EOF >>/tmp/build-crontab-and-stuff.sh
+RUN cat <<EOF >>/tmp/cronjob.sh
+git -C /srv pull
+nginx -s reload
+EOF
+RUN cat <<EOF >>/tmp/docker-entrypoint.sh
 # general steps here
-# 1. point the nginx html dir to the right dir in our repo (which doesn't actually exist in the filesystem yet)
-# 2. set up crontab
-# 3. clone the repo
-# 3.1 check if repo was cloned ok
-# 3.2 if we want a branch, check that out
-# 4. if we want to supply an nginx server config, do that
-# 4.1 fall back to default config if custom config doesn't work for some reason (FIXME or should we crash early and crash hard?)
-# 5. engage cron
-# 6. engage nginx
-# 7. wait forever so the image doesn't quit immediately, since cron and nginx are daemons and docker watches this script to know when to give up
-ln -s /srv/\$DIR /usr/share/nginx/html
+# 1. fill default values if they weren't supplied
+# 2. grab any build deps
+# 3. set up symlinks to nginx conf and html dir
+# 4. clone, checkout
+# 5. build (if we have a build step)
+# 6. set up cronjob to build (if we have a build step)
+# 7. commit cronjob to crontab
+# 8. run crond and nginx
+# 9. sleep forever so docker doesn't quit immediately
+
 [ -z "\$FREQUENCY" ] && export FREQUENCY='0 0 * * *' # pull daily by default
-crontab -l | { cat; echo "\$FREQUENCY git -C /srv pull"; } | crontab -
+[ -z "\$NGINX_CONF" ] && {
+	export NGINX_CONF='/tmp/nginx-default.conf' # default to default server config
+} || {
+	export NGINX_CONF=/srv/\$NGINX_CONF
+}
+
+[ -z "\$APK_DEPENDS" ] || {
+	apk update
+	apk add \$APK_DEPENDS
+}
+
+ln -s /srv/\$DIR /usr/share/nginx/html
+ln -s \$NGINX_CONF /etc/nginx/nginx.conf
+#[ -z "\$NGINX_MODULES" ] || {
+#	mv /etc/nginx/nginx.conf /tmp
+#	for module in \$NGINX_MODULES
+#	do
+#		echo load_module modules/\$module.so\; | tee -a /etc/nginx/nginx.conf
+#	done
+#	cat /tmp/nginx.conf >> /etc/nginx/nginx.conf
+#}
+
 git clone \$REPO /srv
 [ "\$(ls -A /srv)" ] || echo >&2 /srv still empty, was \$REPO pulled successfully?
 [ -z "\$BRANCH" ] || git -C /srv checkout \$BRANCH
-[ -z "\$NGINX_CONF" ] || { # if we asked for a conf file
-	[ -e /srv/\$NGINX_CONF ] && { # and if it exists
-		mv /etc/nginx/conf.d/default.conf /tmp;
-		cp /srv/\$NGINX_CONF /etc/nginx/conf.d/default.conf || {
-			mv /tmp/default.conf /etc/nginx/conf.d/;
-			echo >/dev/stderr Failed to copy custom nginx rules from /srv/\$NGINX_CONF! Falling back to defaults
-		}
-		nginx -t && echo Using custom nginx configuration || {
-			mv /tmp/default.conf /etc/nginx/conf.d/;
-			echo >/dev/stderr Custom nginx rules failed validation! Falling back to defaults
-		}
-	} || echo >/dev/stderr Custom nginx rules were not found at /srv/\$NGINX_CONF! Falling back to defaults
+
+[ -z "\$BUILD" ] || {
+	\$BUILD
+	echo cd /srv >> /tmp/cronjob.sh
+	echo \$BUILD >> /tmp/cronjob.sh
 }
+
+crontab -l | { cat; echo "\$FREQUENCY /tmp/cronjob.sh"; } | crontab -
+
 crond -L /dev/stdout -l2
 /docker-entrypoint.sh nginx
 sleep infinity
 EOF
-CMD /tmp/build-crontab-and-stuff.sh
+
+WORKDIR /srv
+CMD /tmp/docker-entrypoint.sh

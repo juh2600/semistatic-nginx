@@ -2,10 +2,12 @@ services:
   semistatic-test:
     image: semistatic-nginx
     environment:
-      - REPO=https://github.com/josephreed2600/semistatic-nginx.git # git repo
+      - REPO=https://github.com/josephreed2600/juh.gay.git # git repo
       - FREQUENCY=* * * * * # optional, cron format
       - DIR=doc # optional, subdirectory to serve
-      - BRANCH=main # optional, repo branch
-      - NGINX_CONF=default.conf # optional, nginx server config block
+      - BRANCH=dev # optional, repo branch
+      - NGINX_CONF=nginx.conf # optional, nginx config file
+      - APK_DEPENDS=fish pandoc nginx-mod-http-xslt-filter --repository http://dl-cdn.alpinelinux.org/alpine/edge/community # optional, alpine packages to install for build steps
+      - BUILD=build/build.fish # optional, command to build site after pulling
     ports:
       - 80:80
